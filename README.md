@@ -18,9 +18,22 @@ propósito visible — así es como se encuentran los equipos.
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY` (Settings → API → service_role)
    - `MURO_PASSWORD` — la que pide el CSV
+   - `MURO_ANONIMO` — `1` (o ausente) oculta autores; `0` los muestra
 3. **Local:** `npm install && npm run dev`
 4. **Railway:** servicio nuevo apuntando a este repo, las tres variables
    arriba, y listo. `.nvmrc` fija Node 20 para Nixpacks.
+
+## El muro anónimo
+
+Por defecto el muro sale **sin nombres**: con autores a la vista, el voto mide
+popularidad y la gente vota a sus amigos para acabar en su equipo. Los nombres
+se quitan en `/api/muro`, del lado del servidor, no solo en pantalla — ocultarlos
+en el navegador no sirve de nada.
+
+Cuando toque formar equipos, pon `MURO_ANONIMO=0` en Railway y vuelve a
+desplegar: aparecen autores y contactos en las fichas, y con eso la gente puede
+buscarse. El CSV **siempre** trae los nombres, esté o no anónimo el muro: está
+protegido por contraseña y es para ti.
 
 ## Cómo está armado
 

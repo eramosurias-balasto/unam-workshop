@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Contribucion, Entrevista, Identidad, Muro as Datos, Rol, Tipo } from "@/lib/tipos";
 
 const LLAVE = "muro.identidad.v1";
-const VACIO: Datos = { contribuciones: [], votos: [], entrevistas: [] };
+const VACIO: Datos = { contribuciones: [], votos: [], entrevistas: [], anonimo: true };
 
 /* Dos publicaciones de muestra: el muro arranca en blanco y conviene
    enseñar qué se espera antes de que alguien escriba la primera.
@@ -254,6 +254,13 @@ export default function Muro() {
           <Chip activo={orden === "reciente"} al={() => setOrden("reciente")}>Recientes</Chip>
         </div>
 
+        {datos.anonimo && (
+          <p className="nota-anonimo">
+            Los autores están ocultos: vota el problema, no a quien lo escribió. Los nombres
+            aparecen cuando toque formar equipos.
+          </p>
+        )}
+
         <section className="muro">
           {!cargado && (
             <div className="aviso">
@@ -299,12 +306,14 @@ export default function Muro() {
               <h3>{c.titulo}</h3>
               {c.padre_id && titulos.has(c.padre_id) && (
                 <div className="deriva">
-                  Otra solución al problema de {titulos.get(c.padre_id)!.autor_nombre}
+                  {datos.anonimo
+                    ? "Otra solución a otro problema del muro"
+                    : `Otra solución al problema de ${titulos.get(c.padre_id)!.autor_nombre}`}
                 </div>
               )}
               <div className="ficha-cuerpo">{c.problema}</div>
               <div className="ficha-pie">
-                <span className="autor">{c.autor_nombre}</span>
+                {!datos.anonimo && <span className="autor">{c.autor_nombre}</span>}
                 {(entrevistasPor.get(c.id)?.length ?? 0) > 0 && (
                   <span className="cuenta-ent">
                     {entrevistasPor.get(c.id)!.length === 1
@@ -365,6 +374,7 @@ export default function Muro() {
             }}
             nuevoId={nuevoId}
             rol={rolDeEntrada}
+            anonimo={datos.anonimo}
           />
         </Contenedor>
       )}
@@ -401,6 +411,7 @@ export default function Muro() {
       {panel.que === "detalle" && titulos.has(panel.id) && (
         <Contenedor titulo="Ficha de la contribución" cerrar={() => setPanel({ que: "nada" })}>
           <Detalle
+            anonimo={datos.anonimo}
             c={titulos.get(panel.id)!}
             padre={titulos.get(titulos.get(panel.id)!.padre_id ?? "") ?? null}
             votos={votosPor.get(panel.id) ?? 0}
@@ -502,10 +513,12 @@ function FormIdentidad({
   listo,
   nuevoId,
   rol,
+  anonimo,
 }: {
   listo: (i: Identidad) => void;
   nuevoId: () => string;
   rol: Rol;
+  anonimo: boolean;
 }) {
   const [nombre, setNombre] = useState("");
   const [contacto, setContacto] = useState("");
@@ -514,7 +527,9 @@ function FormIdentidad({
   return (
     <>
       <p className="pista">
-        Tu nombre aparece junto a lo que publicas: así es como los equipos se encuentran.
+        {anonimo
+          ? "Por ahora el muro es anónimo: nadie ve quién escribió qué. Tu nombre se guarda para cuando toque formar equipos."
+          : "Tu nombre aparece junto a lo que publicas: así es como los equipos se encuentran."}
       </p>
       <Campo etiqueta="¿Cómo te llamas?">
         <input
@@ -528,7 +543,7 @@ function FormIdentidad({
       </Campo>
       <Campo
         etiqueta="¿Cómo te contactan?"
-        pista="Quien quiera trabajar en tu problema necesita poder buscarte."
+        pista="No se muestra en el muro. Sirve para armar equipos más adelante."
       >
         <input
           type="text"
@@ -621,7 +636,7 @@ function FormContribucion({
     <>
       {padre && (
         <div className="regla">
-          <b>Partes del problema de {padre.autor_nombre}</b>
+          <b>Partes de otro problema del muro</b>
           {padre.titulo}
         </div>
       )}
@@ -875,6 +890,7 @@ function FormEntrevista({
 /* ---------------- detalle ---------------- */
 
 function Detalle({
+  anonimo,
   c,
   padre,
   votos,
@@ -884,6 +900,7 @@ function Detalle({
   alEntrevistar,
   alDerivar,
 }: {
+  anonimo: boolean;
   c: Contribucion;
   padre: Contribucion | null;
   votos: number;
@@ -904,7 +921,13 @@ function Detalle({
         <h3 className="titulo-detalle">{c.titulo}</h3>
       </div>
 
-      {padre && <div className="deriva">Deriva del problema publicado por {padre.autor_nombre}</div>}
+      {padre && (
+        <div className="deriva">
+          {anonimo
+            ? "Deriva de otro problema del muro"
+            : `Deriva del problema publicado por ${padre.autor_nombre}`}
+        </div>
+      )}
 
       <div className="bloque">
         <h4>¿Quién lo tiene?</h4>
@@ -935,8 +958,9 @@ function Detalle({
 
       <div className="meta-detalle">
         <span>
-          {c.autor_nombre}
-          {c.autor_contacto ? ` · ${c.autor_contacto}` : ""}
+          {anonimo
+            ? "Autor oculto hasta formar equipos"
+            : c.autor_nombre + (c.autor_contacto ? ` · ${c.autor_contacto}` : "")}
         </span>
         <span>{cuando(c.creado)}</span>
         <button className="votar" aria-pressed={vote} onClick={alVotar}>
@@ -974,7 +998,7 @@ function Detalle({
             <div className="entrevista" key={e.id}>
               <div className="entrevista-enc">
                 <b>{e.a_quien}</b>
-                <span>por {e.autor_nombre}</span>
+                {!anonimo && <span>por {e.autor_nombre}</span>}
                 <span>{cuando(e.creado)}</span>
               </div>
               <Par t="Qué hace hoy" v={e.hizo} />

@@ -46,4 +46,6 @@ export type Muro = {
   contribuciones: Contribucion[];
   votos: Voto[];
   entrevistas: Entrevista[];
+  /** El servidor borro nombres y contactos antes de mandar el muro. */
+  anonimo: boolean;
 };

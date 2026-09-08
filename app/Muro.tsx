@@ -15,25 +15,6 @@ const VACIO: Datos = {
   maxVotos: 5,
 };
 
-/* Dos publicaciones de muestra: el muro arranca en blanco y conviene
-   enseñar qué se espera antes de que alguien escriba la primera.
-   Una es de derecho y la otra no, a propósito: el problema no tiene
-   que ser jurídico para valer. */
-const EJEMPLOS = [
-  {
-    tipo: "problema" as Tipo,
-    titulo: "Nadie sabe qué hacer cuando el casero se queda con el depósito",
-    problema:
-      "Al terminar el contrato el arrendador inventa daños y retiene el depósito. Reclamarlo cuesta más en tiempo y honorarios que el propio depósito, así que casi nadie lo hace.",
-  },
-  {
-    tipo: "problema-solucion" as Tipo,
-    titulo: "A la 1 de la tarde no hay dónde comer sin perder media hora en la fila",
-    problema:
-      "Entre clase y clase hay cuarenta minutos. Las filas de los puestos de comida se llenan a la misma hora porque todos los grupos salen juntos, y quien no alcanza lugar termina comiendo a las cuatro o no comiendo.",
-  },
-];
-
 function nuevoId() {
   const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
   const bytes = new Uint8Array(12);
@@ -319,25 +300,10 @@ export default function Muro() {
           )}
 
           {cargado && visibles.length === 0 && filtro === "todos" && (
-            <>
-              <div className="aviso">
-                <b>Todavía no hay publicaciones</b>
-                <span>Así se ven una vez publicadas.</span>
-              </div>
-              {EJEMPLOS.map((e, i) => (
-                <article className="ficha ejemplo" key={i}>
-                  <div className="fila-etiquetas">
-                    <Etiqueta tipo={e.tipo} />
-                    <span className="etiqueta muestra">Ejemplo</span>
-                  </div>
-                  <h3>{e.titulo}</h3>
-                  <div className="ficha-cuerpo">{e.problema}</div>
-                  <div className="ficha-pie">
-                    <span className="autor">Así se ve una publicación</span>
-                  </div>
-                </article>
-              ))}
-            </>
+            <div className="aviso">
+              <b>Todavía no hay publicaciones</b>
+              <span>Las que se publiquen aparecen aquí.</span>
+            </div>
           )}
 
           {cargado && visibles.length === 0 && filtro !== "todos" && (

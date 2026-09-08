@@ -154,7 +154,6 @@ button { cursor: pointer; }
   transition: border-color .15s ease;
 }
 .ficha:hover { border-color: color-mix(in srgb, var(--ink) 32%, var(--line)); }
-.ficha.ejemplo { opacity: .72; border-style: dashed; box-shadow: none; }
 
 .fila-etiquetas { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 
@@ -164,7 +163,6 @@ button { cursor: pointer; }
 }
 .etiqueta.solo    { color: var(--ocre); }
 .etiqueta.ambas   { color: var(--jade); }
-.etiqueta.muestra { color: var(--ink-soft); }
 
 .ficha h3 { font-weight: 700; font-size: 16.5px; letter-spacing: -.012em; line-height: 1.24; }
 .ficha-cuerpo {

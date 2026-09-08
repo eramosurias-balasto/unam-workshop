@@ -6,8 +6,10 @@ import type { Contribucion, Entrevista, Identidad, Muro as Datos, Rol, Tipo } fr
 const LLAVE = "muro.identidad.v1";
 const VACIO: Datos = { contribuciones: [], votos: [], entrevistas: [] };
 
-/* Dos publicaciones de muestra: el muro arranca en blanco y hay que
-   enseñar qué se espera antes de que alguien escriba la primera. */
+/* Dos publicaciones de muestra: el muro arranca en blanco y conviene
+   enseñar qué se espera antes de que alguien escriba la primera.
+   Una es de derecho y la otra no, a propósito: el problema no tiene
+   que ser jurídico para valer. */
 const EJEMPLOS = [
   {
     tipo: "problema" as Tipo,
@@ -17,9 +19,9 @@ const EJEMPLOS = [
   },
   {
     tipo: "problema-solucion" as Tipo,
-    titulo: "Los locatarios del tianguis firman contratos que no leen",
+    titulo: "A la 1 de la tarde no hay dónde comer sin perder media hora en la fila",
     problema:
-      "Firman arrendamientos de puesto con cláusulas de desalojo exprés. No los leen porque no los entienden y no tienen a quién preguntarle sin pagar una consulta.",
+      "Entre clase y clase hay cuarenta minutos. Las filas de los puestos de comida se llenan a la misma hora porque todos los grupos salen juntos, y quien no alcanza lugar termina comiendo a las cuatro o no comiendo.",
   },
 ];
 
@@ -56,6 +58,10 @@ export default function Muro() {
   const [panel, setPanel] = useState<Panel>({ que: "nada" });
   const [filtro, setFiltro] = useState<"todos" | Tipo | "mios">("todos");
   const [orden, setOrden] = useState<"votos" | "reciente">("votos");
+  /* Nadie elige ser profesor desde el formulario: se entra con ?profe=1
+     en la URL. El CSV sigue pidiendo MURO_PASSWORD, así que la bandera
+     solo decide qué se ve, nunca qué se puede descargar. */
+  const [rolDeEntrada, setRolDeEntrada] = useState<Rol>("estudiante");
   const pendiente = useRef<null | (() => void)>(null);
 
   /* ---------- datos ---------- */
@@ -79,6 +85,9 @@ export default function Muro() {
   }, [refrescar]);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("profe") === "1") {
+      setRolDeEntrada("profesor");
+    }
     try {
       const raw = localStorage.getItem(LLAVE);
       if (raw) setYo(JSON.parse(raw));
@@ -219,13 +228,11 @@ export default function Muro() {
 
       <main className="env">
         <section className="intro">
-          <h1>
-            Todo negocio empieza con <em>un problema que alguien ya tiene</em>.
-          </h1>
+          <h1>Toda empresa empieza con un problema que alguien ya tiene.</h1>
           <p>
-            Publica los problemas que ves en tu día a día. Puedes traer solo el problema —eso ya
-            vale— o problema y solución. Vota sin límite en todo aquello en lo que de verdad
-            trabajarías, y sal a entrevistar a quien lo padece.
+            Publica los problemas que ves en tu día a día. Puedes traer solo el problema, o el
+            problema y una posible solución. Vota los que trabajarías y registra las entrevistas
+            que hagas.
           </p>
           <div className="cifras">
             <Cifra n={datos.contribuciones.length} rotulo="publicaciones" />
@@ -258,8 +265,8 @@ export default function Muro() {
           {cargado && visibles.length === 0 && filtro === "todos" && (
             <>
               <div className="aviso">
-                <b>El muro está en blanco</b>
-                <span>Así se verá cuando alguien publique. Sé el primero.</span>
+                <b>Todavía no hay publicaciones</b>
+                <span>Así se ven una vez publicadas.</span>
               </div>
               {EJEMPLOS.map((e, i) => (
                 <article className="ficha ejemplo" key={i}>
@@ -357,6 +364,7 @@ export default function Muro() {
               if (seguir) setTimeout(seguir, 0);
             }}
             nuevoId={nuevoId}
+            rol={rolDeEntrada}
           />
         </Contenedor>
       )}
@@ -493,13 +501,14 @@ function Campo({
 function FormIdentidad({
   listo,
   nuevoId,
+  rol,
 }: {
   listo: (i: Identidad) => void;
   nuevoId: () => string;
+  rol: Rol;
 }) {
   const [nombre, setNombre] = useState("");
   const [contacto, setContacto] = useState("");
-  const [rol, setRol] = useState<Rol>("estudiante");
   const [error, setError] = useState("");
 
   return (
@@ -529,34 +538,12 @@ function FormIdentidad({
           placeholder="WhatsApp o correo"
         />
       </Campo>
-      <Campo etiqueta="Eres">
-        <div className="opciones">
-          <label className="opcion">
-            <input
-              type="radio"
-              name="rol"
-              checked={rol === "estudiante"}
-              onChange={() => setRol("estudiante")}
-            />
-            <div>
-              <b>Estudiante</b>
-              <small>Publicas, votas y entrevistas.</small>
-            </div>
-          </label>
-          <label className="opcion">
-            <input
-              type="radio"
-              name="rol"
-              checked={rol === "profesor"}
-              onChange={() => setRol("profesor")}
-            />
-            <div>
-              <b>Profesor</b>
-              <small>Además puedes descargar el muro en CSV.</small>
-            </div>
-          </label>
+      {rol === "profesor" && (
+        <div className="regla">
+          <b>Entras como profesor</b>
+          Vas a ver además el botón para descargar el CSV.
         </div>
-      </Campo>
+      )}
       {error && <div className="error">{error}</div>}
       <div className="acciones">
         <button
@@ -639,7 +626,7 @@ function FormContribucion({
         </div>
       )}
 
-      <Campo etiqueta="El problema, en una frase" pista="Sin la solución adentro. Solo lo que duele.">
+      <Campo etiqueta="El problema, en una frase" pista="Describe el problema, no la solución.">
         <input
           type="text"
           maxLength={80}
@@ -652,7 +639,7 @@ function FormContribucion({
 
       <Campo
         etiqueta="¿Quién lo tiene?"
-        pista="Una persona concreta, no una categoría. «Estudiantes» no cuenta."
+        pista="Una persona o un grupo concreto, no una categoría general."
       >
         <input
           type="text"
@@ -669,27 +656,27 @@ function FormContribucion({
           maxLength={500}
           value={problema}
           onChange={(e) => setProblema(e.target.value)}
-          placeholder="Describe qué pasa, cuándo pasa y a quién le cuesta."
+          placeholder="Qué pasa, cuándo pasa y a quién le cuesta."
         />
       </Campo>
 
-      <Campo etiqueta="¿Qué hacen hoy sin ti?" pista="Si nadie hace nada, quizá no duele lo suficiente.">
+      <Campo etiqueta="¿Qué hacen hoy?" pista="Cómo resuelven el problema actualmente.">
         <textarea
           rows={3}
           maxLength={350}
           value={hoy}
           onChange={(e) => setHoy(e.target.value)}
-          placeholder="¿Cómo le hacen hoy para salir del paso?"
+          placeholder="Los pasos que siguen hoy."
         />
       </Campo>
 
-      <Campo etiqueta="¿Cómo lo sabes?" pista="Lo viviste, lo viste, o lo estás suponiendo.">
+      <Campo etiqueta="¿Cómo lo sabes?" pista="Si lo viviste, lo observaste o lo estás suponiendo.">
         <textarea
           rows={2}
           maxLength={300}
           value={evidencia}
           onChange={(e) => setEvidencia(e.target.value)}
-          placeholder="¿Lo viviste tú? ¿A cuántas personas se lo has oído?"
+          placeholder="A cuántas personas se lo has escuchado."
         />
       </Campo>
 
@@ -706,7 +693,7 @@ function FormContribucion({
             />
             <div>
               <b>Solo problema, sin solución</b>
-              <small>Perfectamente válido. Alguien más puede proponerle una salida.</small>
+              <small>Otra persona puede proponer una solución después.</small>
             </div>
           </label>
           <label className="opcion">
@@ -718,7 +705,7 @@ function FormContribucion({
             />
             <div>
               <b>Problema y solución</b>
-              <small>Traes también una idea de por dónde atacarlo.</small>
+              <small>Incluyes una propuesta inicial de solución.</small>
             </div>
           </label>
         </div>
@@ -726,15 +713,15 @@ function FormContribucion({
 
       {tipo === "problema-solucion" && (
         <Campo
-          etiqueta="Tu corazonada de solución"
-          pista="Una línea. Vas a abandonarla, y no pasa nada: el problema es lo que se queda."
+          etiqueta="Posible solución"
+          pista="Una línea. Es una hipótesis inicial y puede cambiar."
         >
           <input
             type="text"
             maxLength={140}
             value={solucion}
             onChange={(e) => setSolucion(e.target.value)}
-            placeholder="Una sola línea. Vas a cambiarla."
+            placeholder="Una línea."
           />
         </Campo>
       )}

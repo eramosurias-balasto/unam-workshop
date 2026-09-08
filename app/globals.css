@@ -1,48 +1,26 @@
-/* Paleta tomada del mosaico de la Biblioteca Central de CU:
-   piedra, azul, oxido, ocre y jade. */
+/* Fondo blanco, tinta casi negra y cuatro acentos para las etiquetas.
+   Un solo tema: se ve igual en el proyector y en cualquier celular,
+   traiga o no el modo oscuro encendido. */
 
 :root {
-  --piedra:      #EDE8DF;
-  --piedra-alta: #F8F5EF;
-  --tinta:       #17181C;
-  --tinta-suave: #5C5E66;
-  --linea:       #D9D3C6;
-  --azul:        #133C6B;
-  --oxido:       #A8402A;
-  --ocre:        #A87A1E;
-  --jade:        #2A6355;
+  --azul:  #133C6B;
+  --oxido: #A8402A;
+  --ocre:  #8A6413;
+  --jade:  #23594C;
 
-  --ground: var(--piedra);
-  --surface: var(--piedra-alta);
-  --ink: var(--tinta);
-  --ink-soft: var(--tinta-suave);
-  --line: var(--linea);
+  --ground: #FFFFFF;
+  --surface: #FFFFFF;
+  --ink: #18181B;
+  --ink-soft: #5C5E66;
+  --line: #E3E3E6;
   --primario: var(--azul);
-  --sobre-primario: #F8F5EF;
-  --sobre-oxido: #F8F5EF;
-  --sombra: 0 1px 2px rgba(23, 24, 28, .06), 0 8px 24px -16px rgba(23, 24, 28, .28);
+  --sobre-primario: #FFFFFF;
+  --sobre-oxido: #FFFFFF;
+  --sombra: 0 1px 2px rgba(24, 24, 27, .04);
 
   --paso: clamp(14px, 3.5vw, 22px);
   --max: 1120px;
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ground: #131419;
-    --surface: #1C1E25;
-    --ink: #EBE6DC;
-    --ink-soft: #989AA4;
-    --line: #2E313A;
-    --azul: #7BA6DC;
-    --oxido: #E0805F;
-    --ocre: #D7A945;
-    --jade: #5FA895;
-    --primario: #7BA6DC;
-    --sobre-primario: #101218;
-    --sobre-oxido: #17181C;
-    --sombra: 0 1px 2px rgba(0, 0, 0, .4), 0 10px 28px -18px rgba(0, 0, 0, .8);
-  }
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -73,8 +51,7 @@ button { cursor: pointer; }
 
 .barra {
   position: sticky; top: 0; z-index: 30;
-  background: color-mix(in srgb, var(--ground) 92%, transparent);
-  backdrop-filter: blur(10px);
+  background: var(--ground);
   border-bottom: 1px solid var(--line);
 }
 .barra-int {

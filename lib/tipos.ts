@@ -1,11 +1,15 @@
 export type Rol = "estudiante" | "profesor";
 export type Tipo = "problema" | "problema-solucion";
 
+export type InteresTaller = "" | "si" | "tal_vez" | "no";
+
 export type Identidad = {
   id: string;
   nombre: string;
   contacto: string;
   rol: Rol;
+  /** Vacio mientras no haya contestado; se pregunta una sola vez. */
+  interesTaller?: InteresTaller;
 };
 
 export type Contribucion = {
@@ -63,4 +67,6 @@ export type Muro = {
   anonimo: boolean;
   /** Votos por persona; 0 = ilimitados. */
   maxVotos: number;
+  /** Cuentas de la pregunta sobre continuar el taller. */
+  interes: { si: number; tal_vez: number; no: number };
 };

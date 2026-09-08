@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Contribucion, Entrevista, Identidad, Muro as Datos, Respuesta, Rol, Tipo } from "@/lib/tipos";
+import type {
+  Contribucion,
+  Entrevista,
+  Identidad,
+  InteresTaller,
+  Muro as Datos,
+  Respuesta,
+  Rol,
+  Tipo,
+} from "@/lib/tipos";
 import { AvisoRonda, ConsolaRondas, RondasEnFicha } from "./Rondas";
 
 const LLAVE = "muro.identidad.v1";
@@ -13,6 +22,7 @@ const VACIO: Datos = {
   rondaAbierta: 0,
   anonimo: true,
   maxVotos: 5,
+  interes: { si: 0, tal_vez: 0, no: 0 },
 };
 
 function nuevoId() {
@@ -261,6 +271,13 @@ export default function Muro() {
             <Cifra n={nConSolucion} rotulo="con solución" />
             <Cifra n={datos.votos.length} rotulo="votos" />
             <Cifra n={datos.entrevistas.length} rotulo="entrevistas" />
+            {yo?.rol === "profesor" && (
+              <>
+                <Cifra n={datos.interes.si} rotulo="quieren seguir" />
+                <Cifra n={datos.interes.tal_vez} rotulo="tal vez" />
+                <Cifra n={datos.interes.no} rotulo="no creen" />
+              </>
+            )}
           </div>
         </section>
 
@@ -401,6 +418,8 @@ export default function Muro() {
         >
           <FormContribucion
             yo={yo}
+            preguntarInteres={!yo.interesTaller}
+            alResponderInteres={(v) => guardarYo({ ...yo, interesTaller: v })}
             padre={panel.padre}
             listo={() => {
               setPanel({ que: "nada" });
@@ -601,10 +620,14 @@ function FormContribucion({
   yo,
   padre,
   listo,
+  preguntarInteres,
+  alResponderInteres,
 }: {
   yo: Identidad;
   padre: Contribucion | null;
   listo: () => void;
+  preguntarInteres: boolean;
+  alResponderInteres: (v: InteresTaller) => void;
 }) {
   const [titulo, setTitulo] = useState(padre?.titulo ?? "");
   const [quien, setQuien] = useState(padre?.quien ?? "");
@@ -613,6 +636,7 @@ function FormContribucion({
   const [evidencia, setEvidencia] = useState("");
   const [solucion, setSolucion] = useState("");
   const [tipo, setTipo] = useState<Tipo>(padre ? "problema-solucion" : "problema");
+  const [interes, setInteres] = useState<InteresTaller>("");
   const [error, setError] = useState("");
   const [enviando, setEnviando] = useState(false);
 
@@ -636,6 +660,7 @@ function FormContribucion({
           autor_nombre: yo.nombre,
           autor_contacto: yo.contacto,
           rol: yo.rol,
+          interes_taller: interes,
         }),
       });
       if (!r.ok) {
@@ -644,6 +669,7 @@ function FormContribucion({
         setEnviando(false);
         return;
       }
+      if (interes) alResponderInteres(interes);
       listo();
     } catch {
       setError("No se pudo publicar. Revisa tu conexión.");
@@ -758,6 +784,38 @@ function FormContribucion({
             placeholder="Una línea."
           />
         </Campo>
+      )}
+
+      {preguntarInteres && (
+        <>
+          <hr className="tajo" />
+          <Campo
+            etiqueta="Una última, y no se vuelve a preguntar"
+            pista="¿Te interesaría que continuáramos con el taller al menos una vez al mes?"
+          >
+            <div className="opciones">
+              {(
+                [
+                  ["si", "Sí, cuenten conmigo"],
+                  ["tal_vez", "Tal vez, depende de las fechas"],
+                  ["no", "No creo"],
+                ] as [InteresTaller, string][]
+              ).map(([valor, texto]) => (
+                <label className="opcion" key={valor}>
+                  <input
+                    type="radio"
+                    name="interes"
+                    checked={interes === valor}
+                    onChange={() => setInteres(valor)}
+                  />
+                  <div>
+                    <b>{texto}</b>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </Campo>
+        </>
       )}
 
       {error && <div className="error">{error}</div>}

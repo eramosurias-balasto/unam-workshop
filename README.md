@@ -16,6 +16,9 @@ propósito visible — así es como se encuentran los equipos.
 2b. **Rondas (opcional).** Para el speed dating de la sesion 2, corre tambien
    `supabase/migrations/0002_rondas.sql`. Sin esa migracion el muro funciona
    igual, solo sin rondas.
+2c. **Interes en continuar (opcional).** Corre `supabase/migrations/0003_interes.sql`
+   si quieres la pregunta sobre continuar el taller. Sin ella el muro funciona
+   igual, solo sin la pregunta.
 3. **Variables de entorno.** Copia `.env.example` a `.env.local` (local) o
    ponlas en Railway (producción):
    - `SUPABASE_URL`
@@ -62,6 +65,22 @@ rechaza cualquier comentario a una ronda cerrada, aunque alguien arme la peticio
 a mano.
 
 El CSV de los comentarios sale aparte: `/api/export?clave=...&tabla=respuestas`.
+
+## ¿Quiere el grupo que el taller siga?
+
+Al publicar por primera vez se le pregunta a cada quien si le interesa que el
+taller continue al menos una vez al mes, con tres opciones: si, tal vez, no creo.
+
+Va en `participantes` y no en `contribuciones` porque es una pregunta sobre la
+persona: quien publique tres problemas la contestaria tres veces. Se pregunta una
+sola vez y despues no vuelve a aparecer.
+
+Tres opciones y no si/no a proposito: con un binario decir "no" cuesta socialmente
+y te llega 95% de si, que no sirve para decidir nada.
+
+Es opcional: publicar es lo que importa y no vale la pena bloquearlo. Las cuentas
+se ven en las cifras del muro cuando entras como profesor, y la columna
+`quiere_continuar` sale en el CSV.
 
 ## Cómo está armado
 

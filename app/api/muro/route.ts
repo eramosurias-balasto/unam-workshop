@@ -10,12 +10,13 @@ export const dynamic = "force-dynamic";
    Los nombres se quitan aqui, en el servidor: no basta con ocultarlos en
    la pantalla, porque cualquiera abre las herramientas del navegador. */
 export async function GET() {
-  const [c, v, e, r, a] = await Promise.all([
+  const [c, v, e, r, a, i] = await Promise.all([
     supabase.from("contribuciones").select("*").order("creado", { ascending: false }),
     supabase.from("votos").select("contribucion_id, autor_id, autor_nombre"),
     supabase.from("entrevistas").select("*").order("creado", { ascending: false }),
     supabase.from("respuestas").select("*").order("creado", { ascending: true }),
     supabase.from("ajustes").select("ronda_abierta").eq("id", 1).maybeSingle(),
+    supabase.from("participantes").select("interes_taller"),
   ]);
 
   if (c.error || v.error || e.error) {
@@ -28,6 +29,16 @@ export async function GET() {
      tabla que aun no existe seria el peor intercambio posible. */
   const filasRespuestas = r.error ? [] : r.data;
   const rondaAbierta = a.error ? 0 : a.data?.ronda_abierta ?? 0;
+
+  /* Cuentas agregadas de la pregunta sobre continuar el taller. Es la
+     migracion 0003: si no corrio, salen en cero y nadie se entera. */
+  const interes = { si: 0, tal_vez: 0, no: 0 };
+  if (!i.error) {
+    for (const fila of i.data) {
+      const k = fila.interes_taller as keyof typeof interes;
+      if (k in interes) interes[k] += 1;
+    }
+  }
 
   const oculto = esAnonimo();
 
@@ -51,6 +62,7 @@ export async function GET() {
       anonimo: oculto,
       maxVotos: maxVotos(),
       rondaAbierta,
+      interes,
     },
     { headers: { "Cache-Control": "no-store" } }
   );

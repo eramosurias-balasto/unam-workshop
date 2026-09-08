@@ -1,0 +1,1013 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Contribucion, Entrevista, Identidad, Muro as Datos, Rol, Tipo } from "@/lib/tipos";
+
+const LLAVE = "muro.identidad.v1";
+const VACIO: Datos = { contribuciones: [], votos: [], entrevistas: [] };
+
+/* Dos publicaciones de muestra: el muro arranca en blanco y hay que
+   enseñar qué se espera antes de que alguien escriba la primera. */
+const EJEMPLOS = [
+  {
+    tipo: "problema" as Tipo,
+    titulo: "Nadie sabe qué hacer cuando el casero se queda con el depósito",
+    problema:
+      "Al terminar el contrato el arrendador inventa daños y retiene el depósito. Reclamarlo cuesta más en tiempo y honorarios que el propio depósito, así que casi nadie lo hace.",
+  },
+  {
+    tipo: "problema-solucion" as Tipo,
+    titulo: "Los locatarios del tianguis firman contratos que no leen",
+    problema:
+      "Firman arrendamientos de puesto con cláusulas de desalojo exprés. No los leen porque no los entienden y no tienen a quién preguntarle sin pagar una consulta.",
+  },
+];
+
+function nuevoId() {
+  const abc = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += abc[bytes[i] % abc.length];
+  return "p" + s;
+}
+
+function cuando(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const min = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (min < 1) return "hace un momento";
+  if (min < 60) return `hace ${min} min`;
+  if (min < 1440) return `hace ${Math.floor(min / 60)} h`;
+  return d.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+}
+
+type Panel =
+  | { que: "nada" }
+  | { que: "identidad" }
+  | { que: "publicar"; padre: Contribucion | null }
+  | { que: "detalle"; id: string }
+  | { que: "entrevista"; contribucion: Contribucion };
+
+export default function Muro() {
+  const [datos, setDatos] = useState<Datos>(VACIO);
+  const [cargado, setCargado] = useState(false);
+  const [yo, setYo] = useState<Identidad | null>(null);
+  const [panel, setPanel] = useState<Panel>({ que: "nada" });
+  const [filtro, setFiltro] = useState<"todos" | Tipo | "mios">("todos");
+  const [orden, setOrden] = useState<"votos" | "reciente">("votos");
+  const pendiente = useRef<null | (() => void)>(null);
+
+  /* ---------- datos ---------- */
+
+  const refrescar = useCallback(async () => {
+    try {
+      const r = await fetch("/api/muro", { cache: "no-store" });
+      if (!r.ok) return;
+      setDatos(await r.json());
+    } catch {
+      /* la siguiente vuelta lo intenta otra vez */
+    } finally {
+      setCargado(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    refrescar();
+    const t = setInterval(refrescar, 5000);
+    return () => clearInterval(t);
+  }, [refrescar]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LLAVE);
+      if (raw) setYo(JSON.parse(raw));
+    } catch {
+      /* sin identidad guardada */
+    }
+  }, []);
+
+  useEffect(() => {
+    const cerrar = (e: KeyboardEvent) => e.key === "Escape" && setPanel({ que: "nada" });
+    window.addEventListener("keydown", cerrar);
+    return () => window.removeEventListener("keydown", cerrar);
+  }, []);
+
+  /* ---------- derivados ---------- */
+
+  const votosPor = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const v of datos.votos) m.set(v.contribucion_id, (m.get(v.contribucion_id) ?? 0) + 1);
+    return m;
+  }, [datos.votos]);
+
+  const entrevistasPor = useMemo(() => {
+    const m = new Map<string, Entrevista[]>();
+    for (const e of datos.entrevistas) {
+      const l = m.get(e.contribucion_id) ?? [];
+      l.push(e);
+      m.set(e.contribucion_id, l);
+    }
+    return m;
+  }, [datos.entrevistas]);
+
+  const misVotos = useMemo(() => {
+    const s = new Set<string>();
+    if (yo) for (const v of datos.votos) if (v.autor_id === yo.id) s.add(v.contribucion_id);
+    return s;
+  }, [datos.votos, yo]);
+
+  const titulos = useMemo(
+    () => new Map(datos.contribuciones.map((c) => [c.id, c])),
+    [datos.contribuciones]
+  );
+
+  const visibles = useMemo(() => {
+    let l = datos.contribuciones.slice();
+    if (filtro === "mios") l = l.filter((c) => yo && c.autor_id === yo.id);
+    else if (filtro !== "todos") l = l.filter((c) => c.tipo === filtro);
+
+    l.sort((a, b) => {
+      if (orden === "votos") {
+        const d = (votosPor.get(b.id) ?? 0) - (votosPor.get(a.id) ?? 0);
+        if (d !== 0) return d;
+      }
+      return b.creado.localeCompare(a.creado);
+    });
+    return l;
+  }, [datos.contribuciones, filtro, orden, votosPor, yo]);
+
+  /* ---------- identidad ---------- */
+
+  const guardarYo = (i: Identidad) => {
+    setYo(i);
+    try {
+      localStorage.setItem(LLAVE, JSON.stringify(i));
+    } catch {
+      /* modo privado: la identidad dura lo que la pestaña */
+    }
+  };
+
+  const conIdentidad = (accion: () => void) => {
+    if (yo) accion();
+    else {
+      pendiente.current = accion;
+      setPanel({ que: "identidad" });
+    }
+  };
+
+  /* ---------- votar ---------- */
+
+  const votar = async (cid: string) => {
+    conIdentidad(async () => {
+      if (!yo) return;
+      const quitar = misVotos.has(cid);
+
+      // Optimista: la cuenta se mueve al instante y el sondeo confirma.
+      setDatos((d) => ({
+        ...d,
+        votos: quitar
+          ? d.votos.filter((v) => !(v.contribucion_id === cid && v.autor_id === yo.id))
+          : [...d.votos, { contribucion_id: cid, autor_id: yo.id, autor_nombre: yo.nombre }],
+      }));
+
+      await fetch("/api/votos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contribucion_id: cid,
+          quitar,
+          autor_id: yo.id,
+          autor_nombre: yo.nombre,
+          autor_contacto: yo.contacto,
+          rol: yo.rol,
+        }),
+      }).catch(() => {});
+      refrescar();
+    });
+  };
+
+  /* ---------- CSV ---------- */
+
+  const descargar = () => {
+    const clave = window.prompt("Contraseña del taller para descargar el CSV:");
+    if (clave) window.location.href = `/api/export?clave=${encodeURIComponent(clave)}`;
+  };
+
+  /* ---------- render ---------- */
+
+  const nConSolucion = datos.contribuciones.filter((c) => c.tipo === "problema-solucion").length;
+
+  return (
+    <>
+      <header className="barra">
+        <div className="env barra-int">
+          <button className="marca" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            Muro de Problemas <span>Derecho UNAM</span>
+          </button>
+          {yo && (
+            <div className="yo">
+              <span className={"punto" + (yo.rol === "profesor" ? " prof" : "")} />
+              {yo.nombre}
+            </div>
+          )}
+          <button className="btn" onClick={() => conIdentidad(() => setPanel({ que: "publicar", padre: null }))}>
+            Publicar
+          </button>
+        </div>
+      </header>
+
+      <main className="env">
+        <section className="intro">
+          <h1>
+            Todo negocio empieza con <em>un problema que alguien ya tiene</em>.
+          </h1>
+          <p>
+            Publica los problemas que ves en tu día a día. Puedes traer solo el problema —eso ya
+            vale— o problema y solución. Vota sin límite en todo aquello en lo que de verdad
+            trabajarías, y sal a entrevistar a quien lo padece.
+          </p>
+          <div className="cifras">
+            <Cifra n={datos.contribuciones.length} rotulo="publicaciones" />
+            <Cifra n={nConSolucion} rotulo="con solución" />
+            <Cifra n={datos.votos.length} rotulo="votos" />
+            <Cifra n={datos.entrevistas.length} rotulo="entrevistas" />
+          </div>
+        </section>
+
+        <div className="filtros">
+          <Chip activo={filtro === "todos"} al={() => setFiltro("todos")}>Todo</Chip>
+          <Chip activo={filtro === "problema"} al={() => setFiltro("problema")}>Solo problema</Chip>
+          <Chip activo={filtro === "problema-solucion"} al={() => setFiltro("problema-solucion")}>
+            Problema y solución
+          </Chip>
+          <Chip activo={filtro === "mios"} al={() => setFiltro("mios")}>Míos</Chip>
+          <span className="sep" />
+          <Chip activo={orden === "votos"} al={() => setOrden("votos")}>Más votados</Chip>
+          <Chip activo={orden === "reciente"} al={() => setOrden("reciente")}>Recientes</Chip>
+        </div>
+
+        <section className="muro">
+          {!cargado && (
+            <div className="aviso">
+              <b>Cargando el muro…</b>
+              <span>Un segundo.</span>
+            </div>
+          )}
+
+          {cargado && visibles.length === 0 && filtro === "todos" && (
+            <>
+              <div className="aviso">
+                <b>El muro está en blanco</b>
+                <span>Así se verá cuando alguien publique. Sé el primero.</span>
+              </div>
+              {EJEMPLOS.map((e, i) => (
+                <article className="ficha ejemplo" key={i}>
+                  <div className="fila-etiquetas">
+                    <Etiqueta tipo={e.tipo} />
+                    <span className="etiqueta muestra">Ejemplo</span>
+                  </div>
+                  <h3>{e.titulo}</h3>
+                  <div className="ficha-cuerpo">{e.problema}</div>
+                  <div className="ficha-pie">
+                    <span className="autor">Así se ve una publicación</span>
+                  </div>
+                </article>
+              ))}
+            </>
+          )}
+
+          {cargado && visibles.length === 0 && filtro !== "todos" && (
+            <div className="aviso">
+              <b>Nada por aquí todavía</b>
+              <span>Cambia el filtro o publica algo tú.</span>
+            </div>
+          )}
+
+          {visibles.map((c) => (
+            <article className="ficha" key={c.id}>
+              <div className="fila-etiquetas">
+                <Etiqueta tipo={c.tipo} />
+              </div>
+              <h3>{c.titulo}</h3>
+              {c.padre_id && titulos.has(c.padre_id) && (
+                <div className="deriva">
+                  Otra solución al problema de {titulos.get(c.padre_id)!.autor_nombre}
+                </div>
+              )}
+              <div className="ficha-cuerpo">{c.problema}</div>
+              <div className="ficha-pie">
+                <span className="autor">{c.autor_nombre}</span>
+                {(entrevistasPor.get(c.id)?.length ?? 0) > 0 && (
+                  <span className="cuenta-ent">
+                    {entrevistasPor.get(c.id)!.length === 1
+                      ? "1 entrevista"
+                      : `${entrevistasPor.get(c.id)!.length} entrevistas`}
+                  </span>
+                )}
+                <button
+                  className="votar"
+                  aria-pressed={misVotos.has(c.id)}
+                  aria-label="Yo trabajaría en esto"
+                  onClick={() => votar(c.id)}
+                >
+                  {misVotos.has(c.id) ? "✓ " : ""}
+                  {votosPor.get(c.id) ?? 0}
+                </button>
+              </div>
+              <button className="btn fantasma" onClick={() => setPanel({ que: "detalle", id: c.id })}>
+                Abrir ficha
+              </button>
+            </article>
+          ))}
+        </section>
+
+        <footer className="pie">
+          <span>Taller de emprendimiento · Facultad de Derecho, UNAM</span>
+          <span className="sep" />
+          {yo && (
+            <button
+              className="chip"
+              onClick={() => {
+                try {
+                  localStorage.removeItem(LLAVE);
+                } catch {}
+                setYo(null);
+              }}
+            >
+              Cambiar de nombre
+            </button>
+          )}
+          {yo?.rol === "profesor" && (
+            <button className="chip" onClick={descargar}>
+              Descargar CSV
+            </button>
+          )}
+        </footer>
+      </main>
+
+      {panel.que === "identidad" && (
+        <Contenedor titulo="Antes de entrar" cerrar={() => setPanel({ que: "nada" })}>
+          <FormIdentidad
+            listo={(i) => {
+              guardarYo(i);
+              const seguir = pendiente.current;
+              pendiente.current = null;
+              setPanel({ que: "nada" });
+              if (seguir) setTimeout(seguir, 0);
+            }}
+            nuevoId={nuevoId}
+          />
+        </Contenedor>
+      )}
+
+      {panel.que === "publicar" && yo && (
+        <Contenedor
+          titulo={panel.padre ? "Otra solución al mismo problema" : "Publicar en el muro"}
+          cerrar={() => setPanel({ que: "nada" })}
+        >
+          <FormContribucion
+            yo={yo}
+            padre={panel.padre}
+            listo={() => {
+              setPanel({ que: "nada" });
+              refrescar();
+            }}
+          />
+        </Contenedor>
+      )}
+
+      {panel.que === "entrevista" && yo && (
+        <Contenedor titulo="Registrar una entrevista" cerrar={() => setPanel({ que: "nada" })}>
+          <FormEntrevista
+            yo={yo}
+            contribucion={panel.contribucion}
+            listo={() => {
+              setPanel({ que: "detalle", id: panel.contribucion.id });
+              refrescar();
+            }}
+          />
+        </Contenedor>
+      )}
+
+      {panel.que === "detalle" && titulos.has(panel.id) && (
+        <Contenedor titulo="Ficha de la contribución" cerrar={() => setPanel({ que: "nada" })}>
+          <Detalle
+            c={titulos.get(panel.id)!}
+            padre={titulos.get(titulos.get(panel.id)!.padre_id ?? "") ?? null}
+            votos={votosPor.get(panel.id) ?? 0}
+            vote={misVotos.has(panel.id)}
+            entrevistas={entrevistasPor.get(panel.id) ?? []}
+            alVotar={() => votar(panel.id)}
+            alEntrevistar={() =>
+              conIdentidad(() =>
+                setPanel({ que: "entrevista", contribucion: titulos.get(panel.id)! })
+              )
+            }
+            alDerivar={() =>
+              conIdentidad(() => setPanel({ que: "publicar", padre: titulos.get(panel.id)! }))
+            }
+          />
+        </Contenedor>
+      )}
+    </>
+  );
+}
+
+/* ---------------- piezas ---------------- */
+
+function Cifra({ n, rotulo }: { n: number; rotulo: string }) {
+  return (
+    <div className="cifra">
+      <b>{n}</b>
+      <span>{rotulo}</span>
+    </div>
+  );
+}
+
+function Chip({ activo, al, children }: { activo: boolean; al: () => void; children: React.ReactNode }) {
+  return (
+    <button className="chip" aria-pressed={activo} onClick={al}>
+      {children}
+    </button>
+  );
+}
+
+function Etiqueta({ tipo }: { tipo: Tipo }) {
+  return (
+    <span className={"etiqueta " + (tipo === "problema-solucion" ? "ambas" : "solo")}>
+      {tipo === "problema-solucion" ? "Problema y solución" : "Solo problema"}
+    </span>
+  );
+}
+
+function Contenedor({
+  titulo,
+  cerrar,
+  children,
+}: {
+  titulo: string;
+  cerrar: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="telon"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) cerrar();
+      }}
+    >
+      <div className="panel" role="dialog" aria-modal="true" aria-label={titulo}>
+        <div className="panel-barra">
+          <h2>{titulo}</h2>
+          <button className="cerrar" aria-label="Cerrar" onClick={cerrar}>
+            ×
+          </button>
+        </div>
+        <div className="panel-cuerpo">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Campo({
+  etiqueta,
+  pista,
+  children,
+}: {
+  etiqueta: string;
+  pista?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="campo">
+      <label>{etiqueta}</label>
+      {pista && <p className="pista">{pista}</p>}
+      {children}
+    </div>
+  );
+}
+
+/* ---------------- formularios ---------------- */
+
+function FormIdentidad({
+  listo,
+  nuevoId,
+}: {
+  listo: (i: Identidad) => void;
+  nuevoId: () => string;
+}) {
+  const [nombre, setNombre] = useState("");
+  const [contacto, setContacto] = useState("");
+  const [rol, setRol] = useState<Rol>("estudiante");
+  const [error, setError] = useState("");
+
+  return (
+    <>
+      <p className="pista">
+        Tu nombre aparece junto a lo que publicas: así es como los equipos se encuentran.
+      </p>
+      <Campo etiqueta="¿Cómo te llamas?">
+        <input
+          type="text"
+          maxLength={60}
+          value={nombre}
+          autoFocus
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Nombre y apellido"
+        />
+      </Campo>
+      <Campo
+        etiqueta="¿Cómo te contactan?"
+        pista="Quien quiera trabajar en tu problema necesita poder buscarte."
+      >
+        <input
+          type="text"
+          maxLength={80}
+          value={contacto}
+          onChange={(e) => setContacto(e.target.value)}
+          placeholder="WhatsApp o correo"
+        />
+      </Campo>
+      <Campo etiqueta="Eres">
+        <div className="opciones">
+          <label className="opcion">
+            <input
+              type="radio"
+              name="rol"
+              checked={rol === "estudiante"}
+              onChange={() => setRol("estudiante")}
+            />
+            <div>
+              <b>Estudiante</b>
+              <small>Publicas, votas y entrevistas.</small>
+            </div>
+          </label>
+          <label className="opcion">
+            <input
+              type="radio"
+              name="rol"
+              checked={rol === "profesor"}
+              onChange={() => setRol("profesor")}
+            />
+            <div>
+              <b>Profesor</b>
+              <small>Además puedes descargar el muro en CSV.</small>
+            </div>
+          </label>
+        </div>
+      </Campo>
+      {error && <div className="error">{error}</div>}
+      <div className="acciones">
+        <button
+          className="btn"
+          onClick={() => {
+            if (nombre.trim().length < 3) {
+              setError("Escribe tu nombre completo para que te puedan buscar.");
+              return;
+            }
+            listo({ id: nuevoId(), nombre: nombre.trim(), contacto: contacto.trim(), rol });
+          }}
+        >
+          Entrar al muro
+        </button>
+      </div>
+    </>
+  );
+}
+
+function FormContribucion({
+  yo,
+  padre,
+  listo,
+}: {
+  yo: Identidad;
+  padre: Contribucion | null;
+  listo: () => void;
+}) {
+  const [titulo, setTitulo] = useState(padre?.titulo ?? "");
+  const [quien, setQuien] = useState(padre?.quien ?? "");
+  const [problema, setProblema] = useState(padre?.problema ?? "");
+  const [hoy, setHoy] = useState(padre?.hoy ?? "");
+  const [evidencia, setEvidencia] = useState("");
+  const [solucion, setSolucion] = useState("");
+  const [tipo, setTipo] = useState<Tipo>(padre ? "problema-solucion" : "problema");
+  const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const enviar = async () => {
+    setError("");
+    setEnviando(true);
+    try {
+      const r = await fetch("/api/contribuciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          titulo,
+          quien,
+          problema,
+          hoy,
+          evidencia,
+          solucion,
+          tipo,
+          padre_id: padre?.id ?? null,
+          autor_id: yo.id,
+          autor_nombre: yo.nombre,
+          autor_contacto: yo.contacto,
+          rol: yo.rol,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setError(j.error ?? "No se pudo publicar. Inténtalo de nuevo.");
+        setEnviando(false);
+        return;
+      }
+      listo();
+    } catch {
+      setError("No se pudo publicar. Revisa tu conexión.");
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <>
+      {padre && (
+        <div className="regla">
+          <b>Partes del problema de {padre.autor_nombre}</b>
+          {padre.titulo}
+        </div>
+      )}
+
+      <Campo etiqueta="El problema, en una frase" pista="Sin la solución adentro. Solo lo que duele.">
+        <input
+          type="text"
+          maxLength={80}
+          value={titulo}
+          autoFocus
+          onChange={(e) => setTitulo(e.target.value)}
+          placeholder="El trámite de titulación se explica en cinco ventanillas distintas"
+        />
+      </Campo>
+
+      <Campo
+        etiqueta="¿Quién lo tiene?"
+        pista="Una persona concreta, no una categoría. «Estudiantes» no cuenta."
+      >
+        <input
+          type="text"
+          maxLength={90}
+          value={quien}
+          onChange={(e) => setQuien(e.target.value)}
+          placeholder="Pasantes de Derecho que se titulan por tesis"
+        />
+      </Campo>
+
+      <Campo etiqueta="¿Qué pasa exactamente?">
+        <textarea
+          rows={4}
+          maxLength={500}
+          value={problema}
+          onChange={(e) => setProblema(e.target.value)}
+          placeholder="Describe qué pasa, cuándo pasa y a quién le cuesta."
+        />
+      </Campo>
+
+      <Campo etiqueta="¿Qué hacen hoy sin ti?" pista="Si nadie hace nada, quizá no duele lo suficiente.">
+        <textarea
+          rows={3}
+          maxLength={350}
+          value={hoy}
+          onChange={(e) => setHoy(e.target.value)}
+          placeholder="¿Cómo le hacen hoy para salir del paso?"
+        />
+      </Campo>
+
+      <Campo etiqueta="¿Cómo lo sabes?" pista="Lo viviste, lo viste, o lo estás suponiendo.">
+        <textarea
+          rows={2}
+          maxLength={300}
+          value={evidencia}
+          onChange={(e) => setEvidencia(e.target.value)}
+          placeholder="¿Lo viviste tú? ¿A cuántas personas se lo has oído?"
+        />
+      </Campo>
+
+      <hr className="tajo" />
+
+      <Campo etiqueta="Qué traes">
+        <div className="opciones">
+          <label className="opcion">
+            <input
+              type="radio"
+              name="tipo"
+              checked={tipo === "problema"}
+              onChange={() => setTipo("problema")}
+            />
+            <div>
+              <b>Solo problema, sin solución</b>
+              <small>Perfectamente válido. Alguien más puede proponerle una salida.</small>
+            </div>
+          </label>
+          <label className="opcion">
+            <input
+              type="radio"
+              name="tipo"
+              checked={tipo === "problema-solucion"}
+              onChange={() => setTipo("problema-solucion")}
+            />
+            <div>
+              <b>Problema y solución</b>
+              <small>Traes también una idea de por dónde atacarlo.</small>
+            </div>
+          </label>
+        </div>
+      </Campo>
+
+      {tipo === "problema-solucion" && (
+        <Campo
+          etiqueta="Tu corazonada de solución"
+          pista="Una línea. Vas a abandonarla, y no pasa nada: el problema es lo que se queda."
+        >
+          <input
+            type="text"
+            maxLength={140}
+            value={solucion}
+            onChange={(e) => setSolucion(e.target.value)}
+            placeholder="Una sola línea. Vas a cambiarla."
+          />
+        </Campo>
+      )}
+
+      {error && <div className="error">{error}</div>}
+
+      <div className="acciones">
+        <button className="btn" disabled={enviando} onClick={enviar}>
+          {enviando ? "Publicando…" : padre ? "Publicar mi versión" : "Publicar en el muro"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function FormEntrevista({
+  yo,
+  contribucion,
+  listo,
+}: {
+  yo: Identidad;
+  contribucion: Contribucion;
+  listo: () => void;
+}) {
+  const [aQuien, setAQuien] = useState("");
+  const [hizo, setHizo] = useState("");
+  const [ultima, setUltima] = useState("");
+  const [sorpresa, setSorpresa] = useState("");
+  const [supuesto, setSupuesto] = useState("");
+  const [error, setError] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const enviar = async () => {
+    setError("");
+    setEnviando(true);
+    try {
+      const r = await fetch("/api/entrevistas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contribucion_id: contribucion.id,
+          a_quien: aQuien,
+          hizo,
+          ultima,
+          sorpresa,
+          supuesto,
+          autor_id: yo.id,
+          autor_nombre: yo.nombre,
+          autor_contacto: yo.contacto,
+          rol: yo.rol,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        setError(j.error ?? "No se pudo guardar la entrevista.");
+        setEnviando(false);
+        return;
+      }
+      listo();
+    } catch {
+      setError("No se pudo guardar. Revisa tu conexión.");
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="regla">
+        <b>Cómo se entrevista</b>
+        <p style={{ margin: "0 0 8px" }}>
+          No preguntes por el futuro ni por tu idea. Pregunta por lo que ya hizo.
+        </p>
+        <ul>
+          <li>
+            <s>¿Usarías esto?</s> → ¿Qué hiciste la última vez que te pasó?
+          </li>
+          <li>
+            <s>¿Te parece buena idea?</s> → ¿Cuánto tiempo o dinero te costó?
+          </li>
+          <li>
+            <s>¿Pagarías por esto?</s> → ¿Qué has pagado ya por resolverlo?
+          </li>
+        </ul>
+      </div>
+
+      <Campo etiqueta="¿Con quién hablaste?" pista="Descríbelo por su rol, nunca por su nombre.">
+        <input
+          type="text"
+          maxLength={90}
+          value={aQuien}
+          autoFocus
+          onChange={(e) => setAQuien(e.target.value)}
+          placeholder="Pasante de segundo año, titulándose por tesis"
+        />
+      </Campo>
+
+      <Campo etiqueta="¿Qué hace hoy cuando se le presenta el problema?">
+        <textarea
+          rows={4}
+          maxLength={500}
+          value={hizo}
+          onChange={(e) => setHizo(e.target.value)}
+          placeholder="Cuenta los pasos que te describió, no su opinión."
+        />
+      </Campo>
+
+      <Campo
+        etiqueta="¿Cuándo fue la última vez que le pasó?"
+        pista="Si no lo recuerda, el problema no es tan frecuente como crees."
+      >
+        <input
+          type="text"
+          maxLength={90}
+          value={ultima}
+          onChange={(e) => setUltima(e.target.value)}
+          placeholder="La semana pasada / hace seis meses / nunca"
+        />
+      </Campo>
+
+      <Campo etiqueta="¿Qué te sorprendió?">
+        <textarea
+          rows={3}
+          maxLength={400}
+          value={sorpresa}
+          onChange={(e) => setSorpresa(e.target.value)}
+          placeholder="Lo que no esperabas oír es lo único que vale la pena traer."
+        />
+      </Campo>
+
+      <Campo etiqueta="¿Qué supuesto se debilitó?">
+        <textarea
+          rows={3}
+          maxLength={400}
+          value={supuesto}
+          onChange={(e) => setSupuesto(e.target.value)}
+          placeholder="¿Qué creencia tuya quedó más débil después de esta conversación?"
+        />
+      </Campo>
+
+      {error && <div className="error">{error}</div>}
+
+      <div className="acciones">
+        <button className="btn" disabled={enviando} onClick={enviar}>
+          {enviando ? "Guardando…" : "Guardar entrevista"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/* ---------------- detalle ---------------- */
+
+function Detalle({
+  c,
+  padre,
+  votos,
+  vote,
+  entrevistas,
+  alVotar,
+  alEntrevistar,
+  alDerivar,
+}: {
+  c: Contribucion;
+  padre: Contribucion | null;
+  votos: number;
+  vote: boolean;
+  entrevistas: Entrevista[];
+  alVotar: () => void;
+  alEntrevistar: () => void;
+  alDerivar: () => void;
+}) {
+  return (
+    <>
+      <div className="bloque">
+        <div className="fila-etiquetas">
+          <span className={"etiqueta " + (c.tipo === "problema-solucion" ? "ambas" : "solo")}>
+            {c.tipo === "problema-solucion" ? "Problema y solución" : "Solo problema, sin solución"}
+          </span>
+        </div>
+        <h3 className="titulo-detalle">{c.titulo}</h3>
+      </div>
+
+      {padre && <div className="deriva">Deriva del problema publicado por {padre.autor_nombre}</div>}
+
+      <div className="bloque">
+        <h4>¿Quién lo tiene?</h4>
+        <p>{c.quien}</p>
+      </div>
+      <div className="bloque">
+        <h4>¿Qué pasa?</h4>
+        <p>{c.problema}</p>
+      </div>
+      {c.hoy && (
+        <div className="bloque">
+          <h4>¿Qué hacen hoy?</h4>
+          <p>{c.hoy}</p>
+        </div>
+      )}
+      {c.evidencia && (
+        <div className="bloque">
+          <h4>¿Cómo lo sabe?</h4>
+          <p>{c.evidencia}</p>
+        </div>
+      )}
+      {c.solucion && (
+        <div className="bloque">
+          <h4>Corazonada de solución</h4>
+          <p>{c.solucion}</p>
+        </div>
+      )}
+
+      <div className="meta-detalle">
+        <span>
+          {c.autor_nombre}
+          {c.autor_contacto ? ` · ${c.autor_contacto}` : ""}
+        </span>
+        <span>{cuando(c.creado)}</span>
+        <button className="votar" aria-pressed={vote} onClick={alVotar}>
+          {vote ? "✓ Trabajaría en esto · " : "Yo trabajaría en esto · "}
+          {votos}
+        </button>
+      </div>
+
+      <hr className="tajo" />
+
+      <div className="acciones">
+        <button className="btn" onClick={alEntrevistar}>
+          Registrar una entrevista
+        </button>
+        <button className="btn fantasma" onClick={alDerivar}>
+          Proponer otra solución
+        </button>
+      </div>
+
+      <div className="bloque">
+        <h4>Entrevistas · {entrevistas.length}</h4>
+      </div>
+
+      {entrevistas.length === 0 ? (
+        <div className="aviso">
+          <b>Nadie ha salido a preguntar todavía</b>
+          <span>
+            Una hipótesis sin entrevistas es una opinión. Habla con tres personas que lo padezcan y
+            regresa.
+          </span>
+        </div>
+      ) : (
+        <div className="lista">
+          {entrevistas.map((e) => (
+            <div className="entrevista" key={e.id}>
+              <div className="entrevista-enc">
+                <b>{e.a_quien}</b>
+                <span>por {e.autor_nombre}</span>
+                <span>{cuando(e.creado)}</span>
+              </div>
+              <Par t="Qué hace hoy" v={e.hizo} />
+              <Par t="Última vez" v={e.ultima} />
+              <Par t="Qué sorprendió" v={e.sorpresa} />
+              <Par t="Supuesto debilitado" v={e.supuesto} />
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function Par({ t, v }: { t: string; v: string }) {
+  if (!v) return null;
+  return (
+    <dl className="par">
+      <dt>{t}</dt>
+      <dd>{v}</dd>
+    </dl>
+  );
+}

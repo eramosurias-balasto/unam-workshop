@@ -42,10 +42,23 @@ export type Entrevista = {
   creado: string;
 };
 
+export type Respuesta = {
+  id: string;
+  contribucion_id: string;
+  ronda: number;
+  texto: string;
+  autor_id: string;
+  autor_nombre: string;
+  creado: string;
+};
+
 export type Muro = {
   contribuciones: Contribucion[];
   votos: Voto[];
   entrevistas: Entrevista[];
+  respuestas: Respuesta[];
+  /** Ronda de speed dating abierta; 0 = ninguna. */
+  rondaAbierta: number;
   /** El servidor borro nombres y contactos antes de mandar el muro. */
   anonimo: boolean;
   /** Votos por persona; 0 = ilimitados. */

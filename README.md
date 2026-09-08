@@ -13,7 +13,10 @@ propósito visible — así es como se encuentran los equipos.
 
 1. **Supabase.** Crea un proyecto nuevo. En el SQL Editor pega y ejecuta
    `supabase/migrations/0001_muro.sql`.
-2. **Variables de entorno.** Copia `.env.example` a `.env.local` (local) o
+2b. **Rondas (opcional).** Para el speed dating de la sesion 2, corre tambien
+   `supabase/migrations/0002_rondas.sql`. Sin esa migracion el muro funciona
+   igual, solo sin rondas.
+3. **Variables de entorno.** Copia `.env.example` a `.env.local` (local) o
    ponlas en Railway (producción):
    - `SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY` (Settings → API → service_role)
@@ -42,6 +45,23 @@ Cada persona tiene **cinco votos**. Con votos ilimitados nadie prioriza: se vota
 todo lo que suena bien y el orden del muro deja de decir nada. El limite se
 valida en el servidor, no en la pantalla, y revotar algo que ya votaste no
 consume cuota. Se cambia con `MURO_MAX_VOTOS`.
+
+## Las rondas de speed dating
+
+El profesor abre una ronda desde la consola que aparece arriba del muro (entra
+con `?profe=1`; pide `MURO_PASSWORD` una vez por pestana). Con una ronda abierta,
+la ficha de cada problema muestra las preguntas de esa ronda y un campo para
+dejar comentarios.
+
+Las preguntas viven en `lib/rondas.ts` porque son contenido, no datos: se editan
+en el repo. La ronda abierta si es dato, en la tabla `ajustes`, porque se abre en
+vivo y un redespliegue tomaria minutos.
+
+Quien decide si una ronda esta abierta es el servidor, no la pantalla: `/api/respuestas`
+rechaza cualquier comentario a una ronda cerrada, aunque alguien arme la peticion
+a mano.
+
+El CSV de los comentarios sale aparte: `/api/export?clave=...&tabla=respuestas`.
 
 ## Cómo está armado
 

@@ -341,3 +341,67 @@ hr.tajo { border: 0; border-top: 1px solid var(--line); margin: 0; }
 }
 .nota-anonimo .cuota { color: var(--ink); font-weight: 600; }
 .nota-anonimo .aviso-voto { color: var(--oxido); font-weight: 600; }
+
+/* ---------- Rondas de speed dating ---------- */
+
+.consola-envoltura {
+  position: sticky; top: 61px; z-index: 25;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.consola {
+  display: flex; align-items: center; gap: 7px;
+  flex-wrap: wrap; padding: 10px 0;
+}
+.consola-rotulo {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-faint, var(--ink-soft));
+  margin-right: 3px;
+}
+.consola .chip { font-size: 12px; }
+.consola-error { font-size: 12.5px; color: var(--oxido); font-weight: 500; }
+
+.aviso-ronda {
+  display: grid; gap: 3px;
+  border: 1px solid var(--jade); border-left-width: 3px;
+  border-radius: 3px; padding: 12px 15px; margin-bottom: 16px;
+}
+.aviso-ronda b { font-size: 14.5px; color: var(--jade); }
+.aviso-ronda span { font-size: 13.5px; color: var(--ink-soft); }
+
+.ronda {
+  display: grid; gap: 10px;
+  border: 1px solid var(--line); border-radius: 3px;
+  padding: 14px 16px;
+}
+.ronda-enc { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.ronda-enc b { font-size: 14.5px; }
+.pastilla-abierta {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--jade); border: 1px solid currentColor; border-radius: 999px; padding: 2px 8px;
+}
+.ronda-preguntas {
+  margin: 0; padding-left: 19px;
+  font-family: "Petrona", Georgia, serif;
+  font-size: 14.5px; line-height: 1.45; color: var(--ink-soft);
+}
+.ronda-preguntas li { margin: 3px 0; }
+.ronda-vacia {
+  margin: 0; font-size: 13.5px; color: var(--ink-soft);
+  font-family: "Petrona", Georgia, serif; font-style: italic;
+}
+.ronda-lista { display: grid; gap: 8px; }
+.comentario {
+  border-left: 2px solid var(--line); padding-left: 11px;
+  display: grid; gap: 2px;
+}
+.comentario p {
+  margin: 0; font-family: "Petrona", Georgia, serif;
+  font-size: 14.5px; line-height: 1.5;
+}
+.comentario span { font-size: 11.5px; color: var(--ink-soft); }
+.ronda-form { display: grid; gap: 8px; }
+
+@media (max-width: 640px) {
+  .consola-envoltura { position: static; }
+}

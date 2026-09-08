@@ -1,13 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Contribucion, Entrevista, Identidad, Muro as Datos, Rol, Tipo } from "@/lib/tipos";
+import type { Contribucion, Entrevista, Identidad, Muro as Datos, Respuesta, Rol, Tipo } from "@/lib/tipos";
+import { AvisoRonda, ConsolaRondas, RondasEnFicha } from "./Rondas";
 
 const LLAVE = "muro.identidad.v1";
 const VACIO: Datos = {
   contribuciones: [],
   votos: [],
   entrevistas: [],
+  respuestas: [],
+  rondaAbierta: 0,
   anonimo: true,
   maxVotos: 5,
 };
@@ -126,6 +129,16 @@ export default function Muro() {
     }
     return m;
   }, [datos.entrevistas]);
+
+  const respuestasPor = useMemo(() => {
+    const m = new Map<string, Respuesta[]>();
+    for (const x of datos.respuestas) {
+      const l = m.get(x.contribucion_id) ?? [];
+      l.push(x);
+      m.set(x.contribucion_id, l);
+    }
+    return m;
+  }, [datos.respuestas]);
 
   const misVotos = useMemo(() => {
     const s = new Set<string>();
@@ -246,6 +259,14 @@ export default function Muro() {
         </div>
       </header>
 
+      {yo?.rol === "profesor" && (
+        <div className="consola-envoltura">
+          <div className="env">
+            <ConsolaRondas abierta={datos.rondaAbierta} alCambiar={refrescar} />
+          </div>
+        </div>
+      )}
+
       <main className="env">
         <section className="intro">
           <h1>Toda empresa empieza con un problema que alguien ya tiene.</h1>
@@ -273,6 +294,8 @@ export default function Muro() {
           <Chip activo={orden === "votos"} al={() => setOrden("votos")}>Más votados</Chip>
           <Chip activo={orden === "reciente"} al={() => setOrden("reciente")}>Recientes</Chip>
         </div>
+
+        <AvisoRonda abierta={datos.rondaAbierta} />
 
         {(aviso || datos.anonimo || (yo && datos.maxVotos > 0)) && (
           <p className="nota-anonimo">
@@ -438,6 +461,10 @@ export default function Muro() {
         <Contenedor titulo="Ficha de la contribución" cerrar={() => setPanel({ que: "nada" })}>
           <Detalle
             anonimo={datos.anonimo}
+            respuestas={respuestasPor.get(panel.id) ?? []}
+            rondaAbierta={datos.rondaAbierta}
+            yo={yo}
+            refrescar={refrescar}
             c={titulos.get(panel.id)!}
             padre={titulos.get(titulos.get(panel.id)!.padre_id ?? "") ?? null}
             votos={votosPor.get(panel.id) ?? 0}
@@ -917,6 +944,10 @@ function FormEntrevista({
 
 function Detalle({
   anonimo,
+  respuestas,
+  rondaAbierta,
+  yo,
+  refrescar,
   c,
   padre,
   votos,
@@ -927,6 +958,10 @@ function Detalle({
   alDerivar,
 }: {
   anonimo: boolean;
+  respuestas: Respuesta[];
+  rondaAbierta: number;
+  yo: Identidad | null;
+  refrescar: () => void;
   c: Contribucion;
   padre: Contribucion | null;
   votos: number;
@@ -994,6 +1029,15 @@ function Detalle({
           {votos}
         </button>
       </div>
+
+      <RondasEnFicha
+        contribucionId={c.id}
+        respuestas={respuestas}
+        abierta={rondaAbierta}
+        yo={yo}
+        anonimo={anonimo}
+        alGuardar={refrescar}
+      />
 
       <hr className="tajo" />
 

@@ -17,6 +17,37 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Clave incorrecta." }, { status: 401 });
   }
 
+  const tabla = new URL(req.url).searchParams.get("tabla") ?? "contribuciones";
+
+  // Las respuestas de las rondas son uno-a-muchos: no caben como columnas
+  // del muro, salen en su propio CSV.
+  if (tabla === "respuestas") {
+    const [r, c] = await Promise.all([
+      supabase.from("respuestas").select("*").order("creado", { ascending: true }),
+      supabase.from("contribuciones").select("id, titulo"),
+    ]);
+    if (r.error || c.error) {
+      return NextResponse.json({ error: "No se pudieron leer las respuestas." }, { status: 500 });
+    }
+    const nombres = new Map(c.data.map((x) => [x.id, x.titulo]));
+    const cols = ["ronda", "problema", "comentario", "autor", "creado"];
+    const filas = r.data.map((x) => [
+      x.ronda,
+      nombres.get(x.contribucion_id) ?? "",
+      x.texto,
+      x.autor_nombre,
+      x.creado,
+    ]);
+    const csv = "﻿" + [cols, ...filas].map((f) => f.map(celda).join(",")).join("\r\n");
+    return new NextResponse(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": 'attachment; filename="muro-respuestas.csv"',
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   const [c, v, e] = await Promise.all([
     supabase.from("contribuciones").select("*").order("creado", { ascending: true }),
     supabase.from("votos").select("contribucion_id"),

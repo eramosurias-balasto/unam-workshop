@@ -10,15 +10,24 @@ export const dynamic = "force-dynamic";
    Los nombres se quitan aqui, en el servidor: no basta con ocultarlos en
    la pantalla, porque cualquiera abre las herramientas del navegador. */
 export async function GET() {
-  const [c, v, e] = await Promise.all([
+  const [c, v, e, r, a] = await Promise.all([
     supabase.from("contribuciones").select("*").order("creado", { ascending: false }),
     supabase.from("votos").select("contribucion_id, autor_id, autor_nombre"),
     supabase.from("entrevistas").select("*").order("creado", { ascending: false }),
+    supabase.from("respuestas").select("*").order("creado", { ascending: true }),
+    supabase.from("ajustes").select("ronda_abierta").eq("id", 1).maybeSingle(),
   ]);
 
   if (c.error || v.error || e.error) {
     return NextResponse.json({ error: "No se pudo leer el muro." }, { status: 500 });
   }
+
+  /* Las rondas son de la migracion 0002. Si todavia no corrio, estas dos
+     consultas fallan y el muro tiene que seguir funcionando igual: sin
+     rondas, pero en pie. Tumbar el muro entero a media clase por una
+     tabla que aun no existe seria el peor intercambio posible. */
+  const filasRespuestas = r.error ? [] : r.data;
+  const rondaAbierta = a.error ? 0 : a.data?.ronda_abierta ?? 0;
 
   const oculto = esAnonimo();
 
@@ -28,10 +37,21 @@ export async function GET() {
     ? c.data.map((x) => ({ ...x, autor_nombre: "", autor_contacto: "" }))
     : c.data;
   const entrevistas = oculto ? e.data.map((x) => ({ ...x, autor_nombre: "" })) : e.data;
+  const respuestas = oculto
+    ? filasRespuestas.map((x) => ({ ...x, autor_nombre: "" }))
+    : filasRespuestas;
   const votos = oculto ? v.data.map((x) => ({ ...x, autor_nombre: "" })) : v.data;
 
   return NextResponse.json(
-    { contribuciones, votos, entrevistas, anonimo: oculto, maxVotos: maxVotos() },
+    {
+      contribuciones,
+      votos,
+      entrevistas,
+      respuestas,
+      anonimo: oculto,
+      maxVotos: maxVotos(),
+      rondaAbierta,
+    },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

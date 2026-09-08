@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 import { registrar } from "@/lib/participante";
 import { uuid } from "@/lib/validar";
+import { maxVotos } from "@/lib/ajustes";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,33 @@ export async function POST(req: Request) {
       .eq("autor_id", autor.id);
     if (error) return NextResponse.json({ error: "No se pudo quitar el voto." }, { status: 500 });
     return NextResponse.json({ ok: true, votado: false });
+  }
+
+  /* Con votos ilimitados nadie prioriza: se vota todo lo que suena bien y
+     el orden del muro deja de decir nada. Con cinco, votar cuesta algo.
+     MURO_MAX_VOTOS=0 los vuelve ilimitados. */
+  const max = maxVotos();
+  if (max > 0) {
+    // Los votos ya emitidos en OTRAS contribuciones. Revotar la misma es
+    // idempotente y no debe consumir cuota.
+    const { count, error: errCuenta } = await supabase
+      .from("votos")
+      .select("*", { count: "exact", head: true })
+      .eq("autor_id", autor.id)
+      .neq("contribucion_id", contribucion);
+
+    if (errCuenta) {
+      return NextResponse.json({ error: "No se pudo votar." }, { status: 500 });
+    }
+    if ((count ?? 0) >= max) {
+      return NextResponse.json(
+        {
+          error: `Ya usaste tus ${max} votos. Quita uno para poder votar por este.`,
+          sinCuota: true,
+        },
+        { status: 409 }
+      );
+    }
   }
 
   const { error } = await supabase.from("votos").upsert(

@@ -19,6 +19,7 @@ propósito visible — así es como se encuentran los equipos.
    - `SUPABASE_SERVICE_ROLE_KEY` (Settings → API → service_role)
    - `MURO_PASSWORD` — la que pide el CSV
    - `MURO_ANONIMO` — `1` (o ausente) oculta autores; `0` los muestra
+   - `MURO_MAX_VOTOS` — votos por persona; `5` por defecto, `0` = ilimitados
 3. **Local:** `npm install && npm run dev`
 4. **Railway:** servicio nuevo apuntando a este repo, las tres variables
    arriba, y listo. `.nvmrc` fija Node 20 para Nixpacks.
@@ -34,6 +35,13 @@ Cuando toque formar equipos, pon `MURO_ANONIMO=0` en Railway y vuelve a
 desplegar: aparecen autores y contactos en las fichas, y con eso la gente puede
 buscarse. El CSV **siempre** trae los nombres, esté o no anónimo el muro: está
 protegido por contraseña y es para ti.
+
+## Los cinco votos
+
+Cada persona tiene **cinco votos**. Con votos ilimitados nadie prioriza: se vota
+todo lo que suena bien y el orden del muro deja de decir nada. El limite se
+valida en el servidor, no en la pantalla, y revotar algo que ya votaste no
+consume cuota. Se cambia con `MURO_MAX_VOTOS`.
 
 ## Cómo está armado
 

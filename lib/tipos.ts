@@ -48,4 +48,6 @@ export type Muro = {
   entrevistas: Entrevista[];
   /** El servidor borro nombres y contactos antes de mandar el muro. */
   anonimo: boolean;
+  /** Votos por persona; 0 = ilimitados. */
+  maxVotos: number;
 };

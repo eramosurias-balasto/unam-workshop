@@ -4,7 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Contribucion, Entrevista, Identidad, Muro as Datos, Rol, Tipo } from "@/lib/tipos";
 
 const LLAVE = "muro.identidad.v1";
-const VACIO: Datos = { contribuciones: [], votos: [], entrevistas: [], anonimo: true };
+const VACIO: Datos = {
+  contribuciones: [],
+  votos: [],
+  entrevistas: [],
+  anonimo: true,
+  maxVotos: 5,
+};
 
 /* Dos publicaciones de muestra: el muro arranca en blanco y conviene
    enseñar qué se espera antes de que alguien escriba la primera.
@@ -62,6 +68,7 @@ export default function Muro() {
      en la URL. El CSV sigue pidiendo MURO_PASSWORD, así que la bandera
      solo decide qué se ve, nunca qué se puede descargar. */
   const [rolDeEntrada, setRolDeEntrada] = useState<Rol>("estudiante");
+  const [aviso, setAviso] = useState("");
   const pendiente = useRef<null | (() => void)>(null);
 
   /* ---------- datos ---------- */
@@ -180,18 +187,31 @@ export default function Muro() {
           : [...d.votos, { contribucion_id: cid, autor_id: yo.id, autor_nombre: yo.nombre }],
       }));
 
-      await fetch("/api/votos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contribucion_id: cid,
-          quitar,
-          autor_id: yo.id,
-          autor_nombre: yo.nombre,
-          autor_contacto: yo.contacto,
-          rol: yo.rol,
-        }),
-      }).catch(() => {});
+      try {
+        const r = await fetch("/api/votos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contribucion_id: cid,
+            quitar,
+            autor_id: yo.id,
+            autor_nombre: yo.nombre,
+            autor_contacto: yo.contacto,
+            rol: yo.rol,
+          }),
+        });
+        if (!r.ok) {
+          const j = (await r.json().catch(() => ({}))) as { error?: string };
+          setAviso(j.error ?? "No se pudo votar.");
+          setTimeout(() => setAviso(""), 6000);
+        } else if (aviso) {
+          setAviso("");
+        }
+      } catch {
+        setAviso("No se pudo votar. Revisa tu conexión.");
+        setTimeout(() => setAviso(""), 6000);
+      }
+      // Restaura la verdad del servidor: deshace el optimismo si fue rechazado.
       refrescar();
     });
   };
@@ -254,10 +274,16 @@ export default function Muro() {
           <Chip activo={orden === "reciente"} al={() => setOrden("reciente")}>Recientes</Chip>
         </div>
 
-        {datos.anonimo && (
+        {(aviso || datos.anonimo || (yo && datos.maxVotos > 0)) && (
           <p className="nota-anonimo">
-            Los autores están ocultos: vota el problema, no a quien lo escribió. Los nombres
-            aparecen cuando toque formar equipos.
+            {aviso && <b className="aviso-voto">{aviso} </b>}
+            {yo && datos.maxVotos > 0 && (
+              <b className="cuota">
+                Te quedan {Math.max(0, datos.maxVotos - misVotos.size)} de {datos.maxVotos} votos.{" "}
+              </b>
+            )}
+            {datos.anonimo &&
+              "Los autores están ocultos: vota el problema, no a quien lo escribió."}
           </p>
         )}
 

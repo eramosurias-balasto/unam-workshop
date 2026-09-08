@@ -339,3 +339,5 @@ hr.tajo { border: 0; border-top: 1px solid var(--line); margin: 0; }
   border-left: 3px solid var(--ocre);
   padding-left: 13px; max-width: 62ch;
 }
+.nota-anonimo .cuota { color: var(--ink); font-weight: 600; }
+.nota-anonimo .aviso-voto { color: var(--oxido); font-weight: 600; }
